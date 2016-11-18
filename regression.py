@@ -7,6 +7,32 @@ import matplotlib.pyplot as plt
 import pickle
 
 
+
+
+
+def getWar():
+    headers = []
+    years = []
+    for i in range(9):
+        years.append({})
+
+    with open('war_daily_pitch.txt', 'rb') as war_file:
+        war_reader = csv.reader(war_file)
+        for row in war_reader:
+            if len(headers) == 0:
+                headers = row
+            else:
+                year = int(row[4])
+                if year < 2008:
+                    continue
+                player_id = row[3]
+                war_string = row[28];
+                if war_string != 'NULL':
+                    war = float(war_string)
+                    years[year - 2008][player_id] = war
+    return years
+
+
 players = []
 headers = []
 rookieYears = {}
@@ -28,8 +54,53 @@ with open('Pitching.csv', 'rb') as csvfile:
                 for i in range(len(headers)):
                     player[headers[i]] = row[i]
                 players.append(player)
+years = getWar()
+
+data = []
+
+for player in players:
+    if int(player['yearID']) == rookieYears.get(player['playerID']) and int(player['yearID']) < 2013:
+        player['futureWAR'] = years[int(player['yearID'])-2008].get(player['playerID'])
+        if player['futureWAR'] != None:
+            data.append(player)
+
+trainingData = data[0:200]
+testData = data[200:]
+
+x = []
+y = []
+for player in trainingData:
+    features = {}
+    ip = int(player['IPouts']) / 3.0
+    features['ERA'] = int(player['ER']) / ip * 9
+    features['W'] = float(player['W'])
+    features['L'] = float(player['L'])
+    features['IP'] = ip
+    features['SO/IP'] = float(player['SO']) / ip
+    x.append(features)
+    y.append(player['futureWAR'])
 
 
+vec = DictVectorizer()
+scaler = StandardScaler()
+reg = SGDRegressor(loss='squared_loss', n_iter=1000, verbose=2, penalty='l2', \
+    alpha= 0.001, learning_rate="invscaling", eta0=0.002, power_t=0.4)
+scaler.fit(vec.fit_transform(x).toarray())
+reg.fit(scaler.transform(vec.transform(x).toarray()),y)
+
+
+x = []
+for player in trainingData:
+    features = {}
+    ip = int(player['IPouts']) / 3.0
+    features['ERA'] = int(player['ER']) / ip * 9
+    features['W'] = float(player['W'])
+    features['L'] = float(player['L'])
+    features['IP'] = ip
+    features['SO/IP'] = float(player['SO']) / ip
+    x.append(features)
+    predicted = reg.predict(scaler.transform(vec.transform(features).toarray()))[0]
+    print player['playerID'], ' predicted: ', predicted, ' actual: ', player['futureWAR']
 
 # x.append(feature_vec)
 # y.append(result)

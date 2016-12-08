@@ -55,9 +55,9 @@ def getStats():
 def getFeatureDict(player):
     features = {}
     ip = int(player['IPouts']) / 3.0
-    features['ERA'] = int(player['ER']) / ip * 9
-    features['W'] = float(player['W'])
-    features['L'] = float(player['L'])
+    features['ERA'] = float(player['ERA'])
+    features['W'] = int(player['W'])
+    features['L'] = int(player['L'])
     features['IP'] = ip
     features['SO/IP'] = float(player['SO']) / ip
     return features
@@ -66,9 +66,13 @@ def getPlayersFutureWar(players, rookieYears, warYears):
     data = []
     for player in players:
         if int(player['yearID']) == rookieYears.get(player['playerID']) and int(player['yearID']) < 2013:
-            player['futureWAR'] = warYears[int(player['yearID'])-2008].get(player['playerID'])
-            if player['futureWAR'] != None:
+            war1 = warYears[int(player['yearID'])-2008].get(player['playerID'])
+            war2 = warYears[int(player['yearID'])-2008 + 1].get(player['playerID'])
+            war3 = warYears[int(player['yearID'])-2008 + 2].get(player['playerID'])
+            if war1 != None and war2 != None and war3 != None:
+                player['futureWAR']  = war1 + war2 + war3
                 data.append(player)
+    print len(data)
     return data
 
 def squared_loss(data, reg, scaler, vec):

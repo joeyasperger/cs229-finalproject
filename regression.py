@@ -1,6 +1,7 @@
 import csv
 import numpy as np
 from sklearn.svm import SVR
+from sklearn.svm import SVC
 from sklearn.cross_validation import cross_val_score
 from sklearn.cross_validation import train_test_split
 from sklearn.linear_model import SGDRegressor
@@ -10,11 +11,12 @@ from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import pickle
 
+YEAR = 1975
 
 def getWar():
     headers = []
     years = []
-    for i in range(9):
+    for i in range(2015 - YEAR + 2):
         years.append({})
     with open('war_daily_pitch.txt', 'rb') as war_file:
         war_reader = csv.reader(war_file)
@@ -23,13 +25,13 @@ def getWar():
                 headers = row
             else:
                 year = int(row[4])
-                if year < 2008:
+                if year < YEAR:
                     continue
                 player_id = row[3]
                 war_string = row[28];
                 if war_string != 'NULL':
                     war = float(war_string)
-                    years[year - 2008][player_id] = war
+                    years[year - YEAR][player_id] = war
     return years
 
 def getStats():
@@ -49,7 +51,7 @@ def getStats():
                     playerId = row[0]
                     if ipOuts > 150 and year < rookieYears.get(playerId, 2020):
                         rookieYears[playerId] = year
-                if year > 2008:
+                if year > YEAR:
                     for i in range(len(headers)):
                         player[headers[i]] = row[i]
                     players.append(player)
@@ -70,7 +72,7 @@ def getFeatureDict(player):
     features['HR'] = int(player['HR'])
     features['BB'] = int(player['BB'])
     features['BB/IP'] = features['BB']/ip
-    features['BAOpp'] = float(player['BAOpp'])
+    # features['BAOpp'] = float(player['BAOpp'])
     features['R'] = int(player['R'])
     features['ER'] = int(player['ER'])
     features['rookieWAR'] = player['rookieWAR']
@@ -80,10 +82,10 @@ def getPlayersFutureWar(players, rookieYears, warYears):
     data = []
     for player in players:
         if int(player['yearID']) == rookieYears.get(player['playerID']) and int(player['yearID']) < 2013:
-            war0 = warYears[int(player['yearID'])-2008].get(player['playerID'])
-            war1 = warYears[int(player['yearID'])-2008 + 1].get(player['playerID'])
-            war2 = warYears[int(player['yearID'])-2008 + 2].get(player['playerID'])
-            war3 = warYears[int(player['yearID'])-2008 + 3].get(player['playerID'])
+            war0 = warYears[int(player['yearID'])-YEAR].get(player['playerID'])
+            war1 = warYears[int(player['yearID'])-YEAR + 1].get(player['playerID'])
+            war2 = warYears[int(player['yearID'])-YEAR + 2].get(player['playerID'])
+            war3 = warYears[int(player['yearID'])-YEAR + 3].get(player['playerID'])
             if war0 != None and war1 != None and war2 != None and war3 != None:
             # if war0 != None and war1 != None:
                 player['futureWAR'] = war1 + war2 + war3
@@ -106,7 +108,27 @@ def squared_loss(x, y, reg, scaler, vec):
     predicted = []
     for player in x:
         predicted.append(reg.predict(scaler.transform(vec.transform(player).toarray())));
+    differences = [];
+    big_misses = [];
+    for index in range(len(predicted)):
+        print('predicted ', predicted[index], ' actual ', y[index], ' difference ', predicted[index] - y[index])
+        differences.append(abs(predicted[index] - y[index]));
+        if(differences[len(differences) - 1] > 5):
+            big_misses.append(y[index])
+    # print(differences)
+    print(big_misses)
+    print(max(predicted))
     return mean_squared_error(y, predicted)
+
+def assignClassLabels(y):
+    # stud = 1, scrub = 0
+    classes = []
+    for war in y:
+        if war > 5:
+            classes.append(1)
+        else:
+            classes.append(0)
+    return classes  
 
 
 players, rookieYears = getStats()
@@ -126,22 +148,68 @@ x_train, x_test, y_train, y_test = train_test_split(
 
 vec = DictVectorizer()
 scaler = StandardScaler()
-reg = SGDRegressor(loss='squared_loss', n_iter=1000, verbose=2, penalty='l2', \
-    alpha= 0.001, learning_rate="invscaling", eta0=0.002, power_t=0.4)
-svr = SVR(kernel='rbf', C=100, gamma=.001)
-scaler.fit(vec.fit_transform(x_train).toarray())
-scores = cross_val_score(reg, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
-print scores.mean()
 
-scores = cross_val_score(svr, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
-print scores.mean()
-print(len(data))
+svc = SVC()
+classes = assignClassLabels(y_train)
 
-reg.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
-svr.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
+vec.fit_transform(x_train).toarray()
+scores = cross_val_score(svc, vec.transform(x_train).toarray(), classes)
+print scores
+svc.fit(vec.transform(x_train).toarray(), classes)
 
-print 'Training loss SGDRegressor = ', squared_loss(x_train, y_train, reg, scaler, vec)
-print 'Training loss SVR = ', squared_loss(x_train, y_train, svr, scaler, vec)
-# print 'Test loss = ', squared_loss(x_test, y_test, reg, scaler, vec)
+index = 0
+count = 0
+for feature in vec.transform(x_train).toarray():
+    val = svc.predict(feature)
+    if(val[0] != classes[index]):
+        print val[0]
+        count += 1
+    index += 1
+
+print count
+
+# index = 0
+# count = 0
+# test_classes = assignClassLabels(y_test)
+# for feature in vec.transform(x_test).toarray():
+#     val = svc.predict(feature)
+#     if(val[0] != test_classes[index]):
+#         print val[0]
+#         count += 1
+#     index += 1
+
+# print test_classes
+# print(sum(test_classes))
+# print count
+
+
+
+
+# reg = SGDRegressor(loss='squared_loss', n_iter=1000, verbose=2, penalty='l2', \
+#     alpha= 0.001, learning_rate="invscaling", eta0=0.002, power_t=0.4)
+# svr = SVR(kernel='rbf', C=100, gamma=.001)
+# scaler.fit(vec.fit_transform(x_train).toarray())
+# scores = cross_val_score(reg, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
+# print scores.mean()
+
+# scores = cross_val_score(svr, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
+# print scores.mean()
+# print(len(data))
+
+# reg.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
+# svr.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
+
+# print 'Training loss SGDRegressor = ', squared_loss(x_train, y_train, reg, scaler, vec)
+# print 'Training loss SVR = ', squared_loss(x_train, y_train, svr, scaler, vec)
+
+# print 'Test loss SGD= ', squared_loss(x_test, y_test, reg, scaler, vec)
+# print 'Test loss SVR= ', squared_loss(x_test, y_test, svr, scaler, vec)
+# print min(y_test)
+# print min(y_train)
+
+# plt.boxplot(y)
+# plt.show()
+
+
 
 

@@ -10,6 +10,8 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 import pickle
+import optunity
+import optunity.metrics
 
 YEAR = 1975
 
@@ -63,6 +65,10 @@ def getFeatureDict(player):
     features['ERA'] = float(player['ERA'])
     features['W'] = int(player['W'])
     features['L'] = int(player['L'])
+    if features['W'] + features['L'] > 0:
+        features['W%'] = features['W'] / (features['W'] + features['L'])
+    else:
+        features['W%'] = 0
     features['IP'] = ip
     features['SO'] = float(player['SO'])
     features['SO/IP'] = features['SO']/ip
@@ -70,9 +76,13 @@ def getFeatureDict(player):
     features['H'] = int(player['H'])
     features['H/IP'] = features['H']/ip
     features['HR'] = int(player['HR'])
+    features['HR/IP'] = features['HR']/ip
     features['BB'] = int(player['BB'])
     features['BB/IP'] = features['BB']/ip
-    # features['BAOpp'] = float(player['BAOpp'])
+    if '.' not in player['BAOpp']:
+        features['BAOpp'] = 0.0
+    else:
+        features['BAOpp'] = float(player['BAOpp'])
     features['R'] = int(player['R'])
     features['ER'] = int(player['ER'])
     features['rookieWAR'] = player['rookieWAR']
@@ -149,30 +159,49 @@ x_train, x_test, y_train, y_test = train_test_split(
 vec = DictVectorizer()
 scaler = StandardScaler()
 
-svc = SVC()
+
 classes = assignClassLabels(y_train)
 
-vec.fit_transform(x_train).toarray()
-scores = cross_val_score(svc, vec.transform(x_train).toarray(), classes)
-print scores
-svc.fit(vec.transform(x_train).toarray(), classes)
+@optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
+def svm_rbf_tuned_auroc(x_train, y_train, x_test, y_test, C, logGamma):
+    model = SVC(C=C, gamma=10 ** logGamma, class_weight='balanced').fit(x_train, y_train)
+    decision_values = model.decision_function(x_test)
+    auc = optunity.metrics.roc_auc(y_test, decision_values)
+    return auc
+
+#print svm_default_auroc(C=1.0, logGamma=0.0)
+
+optimal_rbf_pars, info, _ = optunity.maximize(svm_rbf_tuned_auroc, num_evals=150, C=[0, 10], logGamma=[-5, 0])
+# when running this outside of IPython we can parallelize via optunity.pmap
+# optimal_rbf_pars, _, _ = optunity.maximize(svm_rbf_tuned_auroc, 150, C=[0, 10], gamma=[0, 0.1], pmap=optunity.pmap)
+
+print("Optimal parameters: " + str(optimal_rbf_pars))
+print("AUROC of tuned SVM with RBF kernel: %1.3f" % info.optimum)
+
+svc = SVC(C=optimal_rbf_pars['C'], gamma=10 ** optimal_rbf_pars['logGamma'], class_weight='balanced')
+
+# scaler.fit_transform(vec.fit_transform(x_train).toarray())
+scores = cross_val_score(svc, scaler.transform(vec.transform(x_train).toarray()), classes)
+print 'cross validation scores: ', scores
+svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
 
 index = 0
 count = 0
-for feature in vec.transform(x_train).toarray():
-    val = svc.predict(feature)
+vals = []
+for feature in scaler.transform(vec.transform(x_train).toarray()):
+    val = svc.predict([feature])
     if(val[0] != classes[index]):
-        print val[0]
+        vals.append(val[0])
         count += 1
     index += 1
-
-print count
+print 'incorrectly predicted:', vals
+print 'num incorrect:', count, 'out of:', index
 
 # index = 0
 # count = 0
 # test_classes = assignClassLabels(y_test)
 # for feature in vec.transform(x_test).toarray():
-#     val = svc.predict(feature)
+#     val = svc.predict([feature])
 #     if(val[0] != test_classes[index]):
 #         print val[0]
 #         count += 1

@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import pickle
 import optunity
 import optunity.metrics
+import pandas
 
 YEAR = 1975
 
@@ -48,7 +49,7 @@ def getStats():
             else:
                 player = {}
                 year = int(row[1])
-                if year > 1990 and row[headers.index('IPouts')] != '':
+                if row[headers.index('IPouts')] != '':
                     ipOuts = int(row[headers.index('IPouts')])
                     playerId = row[0]
                     if ipOuts > 150 and year < rookieYears.get(playerId, 2020):
@@ -162,23 +163,56 @@ scaler = StandardScaler()
 
 classes = assignClassLabels(y_train)
 
-@optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
+space = {'kernel': {'linear': {'C': [0, 2]},
+                    'rbf': {'logGamma': [-5, 0], 'C': [0, 10]},
+                    'poly': {'degree': [2, 5], 'C': [0, 5], 'coef0': [0, 2]}
+                    }
+         }
+
+def train_model(x_train, y_train, kernel, C, logGamma, degree, coef0):
+    """A generic SVM training function, with arguments based on the chosen kernel."""
+    if kernel == 'linear':
+        model = SVC(kernel=kernel, C=C, class_weight='balanced')
+    elif kernel == 'poly':
+        model = SVC(kernel=kernel, C=C, degree=degree, coef0=coef0, class_weight='balanced')
+    elif kernel == 'rbf':
+        model = SVC(kernel=kernel, C=C, gamma=10 ** logGamma, class_weight='balanced')
+    else:
+        raise ArgumentError("Unknown kernel function: %s" % kernel)
+    model.fit(x_train, y_train)
+    return model
+
+# @optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
+cv_decorator = optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
+
 def svm_rbf_tuned_auroc(x_train, y_train, x_test, y_test, C, logGamma):
     model = SVC(C=C, gamma=10 ** logGamma, class_weight='balanced').fit(x_train, y_train)
     decision_values = model.decision_function(x_test)
     auc = optunity.metrics.roc_auc(y_test, decision_values)
     return auc
 
+def svm_tuned_auroc(x_train, y_train, x_test, y_test, kernel='linear', C=0, logGamma=0, degree=0, coef0=0):
+    model = train_model(x_train, y_train, kernel, C, logGamma, degree, coef0)
+    decision_values = model.decision_function(x_test)
+    return optunity.metrics.roc_auc(y_test, decision_values)
+
+svm_tuned_auroc = cv_decorator(svm_tuned_auroc)
+
 #print svm_default_auroc(C=1.0, logGamma=0.0)
 
-optimal_rbf_pars, info, _ = optunity.maximize(svm_rbf_tuned_auroc, num_evals=150, C=[0, 10], logGamma=[-5, 0])
+# optimal_rbf_pars, info, _ = optunity.maximize(svm_rbf_tuned_auroc, num_evals=150, C=[0, 10], logGamma=[-5, 0])
+optimal_svm_pars, info, _ = optunity.maximize_structured(svm_tuned_auroc, space, num_evals=150)
+
 # when running this outside of IPython we can parallelize via optunity.pmap
 # optimal_rbf_pars, _, _ = optunity.maximize(svm_rbf_tuned_auroc, 150, C=[0, 10], gamma=[0, 0.1], pmap=optunity.pmap)
 
-print("Optimal parameters: " + str(optimal_rbf_pars))
+print("Optimal parameters: " + str(optimal_svm_pars))
 print("AUROC of tuned SVM with RBF kernel: %1.3f" % info.optimum)
 
-svc = SVC(C=optimal_rbf_pars['C'], gamma=10 ** optimal_rbf_pars['logGamma'], class_weight='balanced')
+# df = optunity.call_log2dataframe(info.call_log)
+# print df.sort('value', ascending=False)
+
+svc = SVC(C=optimal_svm_pars['C'], kernel='rbf', gamma=10 ** optimal_svm_pars['logGamma'], class_weight='balanced')
 
 # scaler.fit_transform(vec.fit_transform(x_train).toarray())
 scores = cross_val_score(svc, scaler.transform(vec.transform(x_train).toarray()), classes)
@@ -197,19 +231,21 @@ for feature in scaler.transform(vec.transform(x_train).toarray()):
 print 'incorrectly predicted:', vals
 print 'num incorrect:', count, 'out of:', index
 
-# index = 0
-# count = 0
-# test_classes = assignClassLabels(y_test)
-# for feature in vec.transform(x_test).toarray():
-#     val = svc.predict([feature])
-#     if(val[0] != test_classes[index]):
-#         print val[0]
-#         count += 1
-#     index += 1
 
-# print test_classes
-# print(sum(test_classes))
-# print count
+index = 0
+count = 0
+test_classes = assignClassLabels(y_test)
+vals = []
+for feature in vec.transform(x_test).toarray():
+    val = svc.predict([feature])
+    if(val[0] != test_classes[index]):
+        vals.append(val[0])
+        count += 1
+    index += 1
+
+print 'test set classes = ', test_classes
+print 'incorrectly predicted in test set:', vals
+print 'num incorrect:', count, 'out of:', index
 
 
 

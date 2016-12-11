@@ -276,7 +276,10 @@ print("AUROC of tuned SVM with RBF kernel: %1.3f" % info.optimum)
 # df = optunity.call_log2dataframe(info.call_log)
 # print df.sort('value', ascending=False)
 
-svc = SVC(C=optimal_svm_pars['C'], kernel='rbf', gamma=10 ** optimal_svm_pars['logGamma'], class_weight='balanced')
+if optimal_svm_pars['C'] == 'rbf':
+    svc = SVC(C=optimal_svm_pars['C'], kernel='rbf', gamma=10 ** optimal_svm_pars['logGamma'], class_weight='balanced')
+else:
+    svc = SVC(C=optimal_svm_pars['C'], kernel='linear', class_weight='balanced')
 
 # scaler.fit_transform(vec.fit_transform(x_train).toarray())
 scores = cross_val_score(svc, scaler.transform(vec.transform(x_train).toarray()), classes)

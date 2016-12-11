@@ -17,7 +17,7 @@ import optunity
 import optunity.metrics
 import pandas
 
-YEAR = 1975
+YEAR = 1980
 
 def getWar():
     headers = []
@@ -131,7 +131,7 @@ def getPlayersFutureWar(players, rookieYears, warYears):
     return data
 
 def getOversampledData(x, y):
-    ratio = len(y)/sum(y)
+    ratio = (len(y)-sum(y))/sum(y)
     new_x = []
     new_y = []
     for i in range(ratio):
@@ -143,10 +143,11 @@ def getOversampledData(x, y):
         new_x.append(data)
     for label in y:
         new_y.append(label)
+    print('over ratio ', (1.0*len(new_y)-sum(new_y))/sum(new_y))
     return new_x, new_y
 
 def getUndersampledData(x, y):
-    ratio = len(y)/sum(y)
+    ratio = int(round((1.0*len(y)-sum(y))/sum(y)))
     new_x = []
     new_y = []
     counter = 0
@@ -159,6 +160,7 @@ def getUndersampledData(x, y):
         else:
             new_x.append(x[index])
             new_y.append(1)
+    print('under ratio ', (1.0*len(new_y)-sum(new_y))/sum(new_y))
     return new_x, new_y
 
 
@@ -209,7 +211,6 @@ for player in data:
     features = getFeatureDict(player)
     x.append(features)
     y.append(player['futureWAR'])
-    #y.append(player['rookieWAR'])
 
 x_train, x_test, y_train, y_test = train_test_split(
     x, y, test_size=.20, random_state=0)
@@ -320,36 +321,82 @@ print 'num incorrect:', count, 'out of:', index
 ##### BOOSTING CODE ####
 
 
-# x_train_over, classes_over = getOversampledData(x_train, classes)
-# x_train_under, classes_under = getUndersampledData(x_train, classes)
+x_train_over, classes_over = getOversampledData(x_train, classes)
+x_train_under, classes_under = getUndersampledData(x_train, classes)
 
-# gbc = GradientBoostingClassifier()
-# scaler.fit(vec.fit_transform(x_train).toarray())
-# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
-# print scores
-# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_over).toarray()), classes_over, cv=5)
-# print scores
-# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
-# print scores
-# svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
-# gbc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
+gbc = GradientBoostingClassifier(n_estimators=100)
+scaler.fit(vec.fit_transform(x_train).toarray())
+scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
+print scores
+scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_over).toarray()), classes_over, cv=5)
+print scores
+scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
+print scores
+svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
+gbc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
 
-# print len(classes_over)
-# print sum(classes_over)
+print len(classes_over)
+print sum(classes_over)
 
-# print len(classes_under)
-# print sum(classes_under)
+print len(classes_under)
+print sum(classes_under)
 
-# index = 0
-# count = 0
-# for feature in x_train:
-#     val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
-#     if(val[0] != classes[index]):
-#         print val[0]
-#         count += 1
-#     index += 1
-# print count
-# print(sum(classes))
+gbc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
+
+index = 0
+count = 0
+for feature in x_train:
+    val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
+    if(val[0] != classes[index]):
+        print val[0]
+        count += 1
+    index += 1
+print count
+print(sum(classes))
+
+index = 0
+count = 0
+for feature in x_test:
+    val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
+    if(val[0] != test_classes[index]):
+        print val[0]
+        count += 1
+    index += 1
+print count
+print(sum(test_classes))
+print index
+
+gbc.fit(scaler.transform(vec.transform(x_train_over).toarray()), classes_over)
+
+index = 0
+count = 0
+for feature in x_test:
+    val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
+    if(val[0] != test_classes[index]):
+        print val[0]
+        count += 1
+    index += 1
+print count
+print(sum(test_classes))
+print index
+
+gbc.fit(scaler.transform(vec.transform(x_train_under).toarray()), classes_under)
+
+index = 0
+count = 0
+for feature in x_test:
+    val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
+    if(val[0] != test_classes[index]):
+        print val[0]
+        count += 1
+    index += 1
+print count
+print(sum(test_classes))
+print index
+
+
+
+
 
 ### END BOOSTING
 

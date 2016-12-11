@@ -11,13 +11,14 @@ from sklearn.linear_model import SGDRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import mean_squared_error
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import pickle
 import optunity
 import optunity.metrics
 import pandas
 
-YEAR = 1980
+YEAR = 1985
 
 def getWar():
     headers = []
@@ -216,12 +217,16 @@ x_train, x_test, y_train, y_test = train_test_split(
     x, y, test_size=.20, random_state=0)
 
 svc = SVC(C=1000, gamma=1e-1, class_weight='balanced')
+pca = PCA(n_components=10)
 classes = assignClassLabels(y_train)
+
 
 
 
 vec = DictVectorizer()
 scaler = StandardScaler()
+
+scaler.fit(vec.fit_transform(x_train).toarray())
 
 
 classes = assignClassLabels(y_train)
@@ -247,8 +252,7 @@ def train_model(x_train, y_train, kernel, C, logGamma, degree, coef0):
     model.fit(x_train, y_train)
     return model
 
-# @optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
-cv_decorator = optunity.cross_validated(x=scaler.fit_transform(vec.fit_transform(x_train).toarray()), y=classes, num_folds=3)
+cv_decorator = optunity.cross_validated(x=scaler.transform(vec.transform(x_train).toarray()), y=classes, num_folds=3)
 
 def svm_rbf_tuned_auroc(x_train, y_train, x_test, y_test, C, logGamma):
     model = SVC(C=C, gamma=10 ** logGamma, class_weight='balanced').fit(x_train, y_train)
@@ -266,7 +270,7 @@ svm_tuned_auroc = cv_decorator(svm_tuned_auroc)
 #print svm_default_auroc(C=1.0, logGamma=0.0)
 
 # optimal_rbf_pars, info, _ = optunity.maximize(svm_rbf_tuned_auroc, num_evals=150, C=[0, 10], logGamma=[-5, 0])
-optimal_svm_pars, info, _ = optunity.maximize_structured(svm_tuned_auroc, space, num_evals=150)
+optimal_svm_pars, info, _ = optunity.maximize_structured(svm_tuned_auroc, space, num_evals=400)
 
 # when running this outside of IPython we can parallelize via optunity.pmap
 # optimal_rbf_pars, _, _ = optunity.maximize(svm_rbf_tuned_auroc, 150, C=[0, 10], gamma=[0, 0.1], pmap=optunity.pmap)
@@ -282,7 +286,6 @@ if optimal_svm_pars['C'] == 'rbf':
 else:
     svc = SVC(C=optimal_svm_pars['C'], kernel='linear', class_weight='balanced')
 
-# scaler.fit_transform(vec.fit_transform(x_train).toarray())
 scores = cross_val_score(svc, scaler.transform(vec.transform(x_train).toarray()), classes)
 print 'cross validation scores: ', scores
 svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
@@ -304,7 +307,7 @@ index = 0
 count = 0
 test_classes = assignClassLabels(y_test)
 vals = []
-for feature in vec.transform(x_test).toarray():
+for feature in scaler.transform(vec.transform(x_test).toarray()):
     val = svc.predict([feature])
     if(val[0] != test_classes[index]):
         vals.append(val[0])

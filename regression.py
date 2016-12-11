@@ -1,7 +1,10 @@
 import csv
 import numpy as np
+import optunity
+import optunity.metrics
 from sklearn.svm import SVR
 from sklearn.svm import SVC
+from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.cross_validation import cross_val_score
 from sklearn.cross_validation import train_test_split
 from sklearn.linear_model import SGDRegressor
@@ -58,6 +61,25 @@ def getStats():
                     for i in range(len(headers)):
                         player[headers[i]] = row[i]
                     players.append(player)
+
+    new_headers = []
+    with open('war_daily_pitch.txt', 'rb') as war_file:
+        war_reader = csv.reader(war_file)
+        for row in war_reader:
+            if len(new_headers) == 0:
+                new_headers = row
+            else:
+                year = int(row[4])
+                player_id = row[3]
+                if year < YEAR or rookieYears.get(player_id) != year:
+                    continue
+                runs_saved = float(row[22])
+                age = int(row[1])
+                for player in players:
+                    if player['playerID'] != player_id:
+                        continue
+                    player['age'] = age
+                    player['RS_def_total'] = runs_saved
     return players, rookieYears
 
 def getFeatureDict(player):
@@ -80,7 +102,9 @@ def getFeatureDict(player):
     features['HR/IP'] = features['HR']/ip
     features['BB'] = int(player['BB'])
     features['BB/IP'] = features['BB']/ip
-    if '.' not in player['BAOpp']:
+    features['RS_def_total'] = player['RS_def_total']
+    features['age'] = player['age']
+    if('.' not in player['BAOpp']):
         features['BAOpp'] = 0.0
     else:
         features['BAOpp'] = float(player['BAOpp'])
@@ -105,6 +129,39 @@ def getPlayersFutureWar(players, rookieYears, warYears):
                 data.append(player)
     print len(data)
     return data
+
+def getOversampledData(x, y):
+    ratio = len(y)/sum(y)
+    new_x = []
+    new_y = []
+    for i in range(ratio):
+        for index in range(len(y)):
+            if y[index] == 1:
+                new_x.append(x[index])
+                new_y.append(1)
+    for data in x:
+        new_x.append(data)
+    for label in y:
+        new_y.append(label)
+    return new_x, new_y
+
+def getUndersampledData(x, y):
+    ratio = len(y)/sum(y)
+    new_x = []
+    new_y = []
+    counter = 0
+    for index in range(len(y)):
+        if y[index] == 0:
+            counter+=1
+            if(counter % ratio == 0):
+                new_x.append(x[index])
+                new_y.append(0)
+        else:
+            new_x.append(x[index])
+            new_y.append(1)
+    return new_x, new_y
+
+
 
 # def squared_loss(feature_list, war, reg, scaler, vec):
 #     loss = 0.0
@@ -157,11 +214,18 @@ for player in data:
 x_train, x_test, y_train, y_test = train_test_split(
     x, y, test_size=.20, random_state=0)
 
+svc = SVC(C=1000, gamma=1e-1, class_weight='balanced')
+classes = assignClassLabels(y_train)
+
+
+
 vec = DictVectorizer()
 scaler = StandardScaler()
 
 
 classes = assignClassLabels(y_train)
+
+### START SVC CODE ###
 
 space = {'kernel': {'linear': {'C': [0, 2]},
                     'rbf': {'logGamma': [-5, 0], 'C': [0, 10]},
@@ -247,33 +311,44 @@ print 'test set classes = ', test_classes
 print 'incorrectly predicted in test set:', vals
 print 'num incorrect:', count, 'out of:', index
 
+### END SVC ####
 
 
+##### BOOSTING CODE ####
 
-# reg = SGDRegressor(loss='squared_loss', n_iter=1000, verbose=2, penalty='l2', \
-#     alpha= 0.001, learning_rate="invscaling", eta0=0.002, power_t=0.4)
-# svr = SVR(kernel='rbf', C=100, gamma=.001)
+
+# x_train_over, classes_over = getOversampledData(x_train, classes)
+# x_train_under, classes_under = getUndersampledData(x_train, classes)
+
+# gbc = GradientBoostingClassifier()
 # scaler.fit(vec.fit_transform(x_train).toarray())
-# scores = cross_val_score(reg, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
-# print scores.mean()
+# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
+# print scores
+# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_over).toarray()), classes_over, cv=5)
+# print scores
+# scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
+# print scores
+# svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
+# gbc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
 
-# scores = cross_val_score(svr, scaler.transform(vec.transform(x_train).toarray()),y_train, cv=5)
-# print scores.mean()
-# print(len(data))
+# print len(classes_over)
+# print sum(classes_over)
 
-# reg.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
-# svr.fit(scaler.transform(vec.transform(x_train).toarray()),y_train)
+# print len(classes_under)
+# print sum(classes_under)
 
-# print 'Training loss SGDRegressor = ', squared_loss(x_train, y_train, reg, scaler, vec)
-# print 'Training loss SVR = ', squared_loss(x_train, y_train, svr, scaler, vec)
+# index = 0
+# count = 0
+# for feature in x_train:
+#     val = gbc.predict(scaler.transform(vec.transform(feature).toarray()))
+#     if(val[0] != classes[index]):
+#         print val[0]
+#         count += 1
+#     index += 1
+# print count
+# print(sum(classes))
 
-# print 'Test loss SGD= ', squared_loss(x_test, y_test, reg, scaler, vec)
-# print 'Test loss SVR= ', squared_loss(x_test, y_test, svr, scaler, vec)
-# print min(y_test)
-# print min(y_train)
-
-# plt.boxplot(y)
-# plt.show()
+### END BOOSTING
 
 
 

@@ -213,7 +213,7 @@ for player in data:
     #y.append(player['rookieWAR'])
 
 x_train, x_test, y_train, y_test = train_test_split(
-    x, y, test_size=.20, random_state=0)
+    x, y, test_size=.20, random_state=3)
 
 svc = SVC(C=1000, gamma=1e-1, class_weight='balanced')
 pca = PCA(n_components=10)
@@ -225,16 +225,17 @@ classes = assignClassLabels(y_train)
 vec = DictVectorizer()
 scaler = StandardScaler()
 
-scaler.fit(vec.fit_transform(x_train).toarray())
+pca.fit(scaler.fit_transform(vec.fit_transform(x_train).toarray()))
 
 
 classes = assignClassLabels(y_train)
 
 ### START SVC CODE ###
 
-space = {'kernel': {'linear': {'C': [0, 2]},
-                    'rbf': {'logGamma': [-5, 0], 'C': [0, 10]},
-                    'poly': {'degree': [2, 5], 'C': [0, 5], 'coef0': [0, 2]}
+space = {'kernel': 
+                    # {'linear': {'C': [0, 2]}
+                    {'rbf': {'logGamma': [-5, 0], 'C': [0, 10]}
+                    # {'poly': {'degree': [2, 5], 'C': [0, 5], 'coef0': [0, 2]}
                     }
          }
 
@@ -269,7 +270,7 @@ svm_tuned_auroc = cv_decorator(svm_tuned_auroc)
 #print svm_default_auroc(C=1.0, logGamma=0.0)
 
 # optimal_rbf_pars, info, _ = optunity.maximize(svm_rbf_tuned_auroc, num_evals=150, C=[0, 10], logGamma=[-5, 0])
-optimal_svm_pars, info, _ = optunity.maximize_structured(svm_tuned_auroc, space, num_evals=400)
+optimal_svm_pars, info, _ = optunity.maximize_structured(svm_tuned_auroc, space, num_evals=150)
 
 # when running this outside of IPython we can parallelize via optunity.pmap
 # optimal_rbf_pars, _, _ = optunity.maximize(svm_rbf_tuned_auroc, 150, C=[0, 10], gamma=[0, 0.1], pmap=optunity.pmap)
@@ -280,10 +281,15 @@ print("AUROC of tuned SVM with RBF kernel: %1.3f" % info.optimum)
 # df = optunity.call_log2dataframe(info.call_log)
 # print df.sort('value', ascending=False)
 
-if optimal_svm_pars['C'] == 'rbf':
-    svc = SVC(C=optimal_svm_pars['C'], kernel='rbf', gamma=10 ** optimal_svm_pars['logGamma'], class_weight='balanced')
-else:
-    svc = SVC(C=optimal_svm_pars['C'], kernel='linear', class_weight='balanced')
+# if optimal_svm_pars['kernel'] == 'rbf':
+svc = SVC(C=optimal_svm_pars['C'], kernel='rbf', gamma=10 ** optimal_svm_pars['logGamma'], class_weight='balanced')
+# else:
+# svc = SVC(C=optimal_svm_pars['C'], kernel='linear', class_weight='balanced')
+# svc = SVC(C=optimal_svm_pars['C'], degree=optimal_svm_pars['degree'], kernel='poly', class_weight='balanced', coef0=optimal_svm_pars['coef0'])
+
+# svc = SVC(C=0.04114520048839382, degree=2.6709258617355047, kernel='poly', class_weight='balanced', coef0=1.3224720206121094)
+
+
 
 scores = cross_val_score(svc, scaler.transform(vec.transform(x_train).toarray()), classes)
 print 'cross validation scores: ', scores
@@ -300,6 +306,7 @@ for feature in scaler.transform(vec.transform(x_train).toarray()):
     index += 1
 print 'incorrectly predicted:', vals
 print 'num incorrect:', count, 'out of:', index
+print count/float(index)
 
 
 index = 0
@@ -316,6 +323,7 @@ for feature in scaler.transform(vec.transform(x_test).toarray()):
 print 'test set classes = ', test_classes
 print 'incorrectly predicted in test set:', vals
 print 'num incorrect:', count, 'out of:', index
+print count/float(index)
 
 ### END SVC ####
 

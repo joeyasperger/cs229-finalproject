@@ -327,7 +327,10 @@ print 'num incorrect:', count, 'out of:', index
 x_train_over, classes_over = getOversampledData(x_train, classes)
 x_train_under, classes_under = getUndersampledData(x_train, classes)
 
-gbc = GradientBoostingClassifier(n_estimators=100)
+gbc = GradientBoostingClassifier(n_estimators=50)
+gbc2 = GradientBoostingClassifier(n_estimators=100)
+gbc3 = GradientBoostingClassifier(n_estimators=200)
+
 scaler.fit(vec.fit_transform(x_train).toarray())
 scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
 print scores
@@ -335,6 +338,23 @@ scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_over).toarr
 print scores
 scores = cross_val_score(gbc, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
 print scores
+
+scaler.fit(vec.fit_transform(x_train).toarray())
+scores = cross_val_score(gbc2, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
+print scores
+scores = cross_val_score(gbc2, scaler.transform(vec.transform(x_train_over).toarray()), classes_over, cv=5)
+print scores
+scores = cross_val_score(gbc2, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
+print scores
+
+scaler.fit(vec.fit_transform(x_train).toarray())
+scores = cross_val_score(gbc3, scaler.transform(vec.transform(x_train).toarray()), classes, cv=5)
+print scores
+scores = cross_val_score(gbc3, scaler.transform(vec.transform(x_train_over).toarray()), classes_over, cv=5)
+print scores
+scores = cross_val_score(gbc3, scaler.transform(vec.transform(x_train_under).toarray()), classes_under, cv=5)
+print scores
+
 svc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
 gbc.fit(scaler.transform(vec.transform(x_train).toarray()), classes)
 
